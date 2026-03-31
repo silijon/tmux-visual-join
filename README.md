@@ -11,7 +11,7 @@ A tmux plugin that provides an interactive popup for pulling panes from other wi
 Add to your `.tmux.conf`:
 
 ```tmux
-set -g @plugin 'jd/tmux-visual-join'
+set -g @plugin 'silijon/tmux-visual-join'
 ```
 
 Then press `prefix + I` to install.
