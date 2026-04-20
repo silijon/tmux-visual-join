@@ -98,10 +98,43 @@ render_preview() {
   local raw_target="${CURRENT_PANES[$SELECTED]%%$'\t'*}"
   local pane_id="%${raw_target##*%}"
 
-  # Capture source pane, truncate each line to popup width, take last preview_rows.
-  # Use -S -N to pull from scrollback so short/empty viewports still fill the preview.
   local max_cols=$((POPUP_COLS - 1))
   local scroll_start=$((-preview_rows * 2))
+
+  {
+    echo "POPUP_ROWS=$POPUP_ROWS POPUP_COLS=$POPUP_COLS"
+    echo "used=$used preview_rows=$preview_rows"
+    echo "pane_id=$pane_id scroll_start=$scroll_start max_cols=$max_cols"
+    pane_dims=$(tmux display-message -p -t "$pane_id" '#{pane_width}x#{pane_height}' 2>/dev/null)
+    echo "source pane dims=$pane_dims"
+    raw=$(tmux capture-pane -ep -S "$scroll_start" -t "$pane_id" 2>/dev/null)
+    echo "raw lines=$(printf '%s\n' "$raw" | wc -l)"
+    after_awk=$(printf '%s\n' "$raw" | awk -v max="$max_cols" '
+      {
+        out = ""; vis = 0; i = 1; n = length($0);
+        while (i <= n && vis < max) {
+          c = substr($0, i, 1);
+          if (c == "\033") {
+            out = out c; i++;
+            if (i <= n && substr($0, i, 1) == "[") {
+              out = out "["; i++;
+              while (i <= n) {
+                ch = substr($0, i, 1); out = out ch; i++;
+                if (ch ~ /[@-~]/) break;
+              }
+            }
+          } else {
+            out = out c; vis++; i++;
+          }
+        }
+        print out "\033[0m";
+      }')
+    echo "after awk lines=$(printf '%s\n' "$after_awk" | wc -l)"
+    after_tail=$(printf '%s\n' "$after_awk" | tail -n "$preview_rows")
+    echo "after tail lines=$(printf '%s\n' "$after_tail" | wc -l)"
+    echo "---"
+  } >> /tmp/vj_debug.log
+
   tmux capture-pane -ep -S "$scroll_start" -t "$pane_id" 2>/dev/null \
     | awk -v max="$max_cols" '
       {
