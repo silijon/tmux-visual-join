@@ -88,9 +88,10 @@ render_preview() {
   local preview_rows=$((POPUP_ROWS - used - 1))  # 1 = separator
   [[ "$preview_rows" -lt 3 ]] && return
 
-  # Separator
+  # Separator (leave 1 col margin to prevent autowrap consuming an extra row)
+  local sep_cols=$((POPUP_COLS - 1))
   local sep
-  sep=$(printf '─%.0s' $(seq 1 "$POPUP_COLS"))
+  sep=$(printf '─%.0s' $(seq 1 "$sep_cols"))
   printf '\e[2m%s\e[0m\n' "$sep"
 
   # Extract the pane_id (%NN) from the join target (session_id:window_id.%pane_id)
@@ -98,9 +99,10 @@ render_preview() {
   local pane_id="%${raw_target##*%}"
 
   # Capture bottom of source pane, strip trailing blank lines, then pad to fit preview_rows
+  local max_cols=$((POPUP_COLS - 1))
   local captured
   captured=$(tmux capture-pane -ep -t "$pane_id" 2>/dev/null \
-    | awk -v max="$POPUP_COLS" '
+    | awk -v max="$max_cols" '
       {
         out = ""; vis = 0; i = 1; n = length($0);
         while (i <= n && vis < max) {
