@@ -75,15 +75,15 @@ join_pane() {
   exit 0
 }
 
+TAB_STRIP_ROWS=0  # set by render(), read by render_preview()
+
 render_preview() {
   local pane_count="${#CURRENT_PANES[@]}"
   [[ "$pane_count" -eq 0 ]] && return
 
   # Calculate rows consumed by chrome above the preview
   local used=2  # footer + blank line
-  if [[ "${#SESSIONS[@]}" -gt 1 ]]; then
-    used=$((used + 2))  # tab strip + blank line
-  fi
+  used=$((used + TAB_STRIP_ROWS))
   used=$((used + pane_count))  # pane list rows
 
   local preview_rows=$((POPUP_ROWS - used - 2))  # 1 = separator + 1 = avoid scroll on last row
@@ -158,17 +158,35 @@ render() {
   fi
 
   # Tab strip — only if more than one session
+  TAB_STRIP_ROWS=0
   if [[ "${#SESSIONS[@]}" -gt 1 ]]; then
+    local col=0
+    TAB_STRIP_ROWS=1
     for i in "${!SESSIONS[@]}"; do
       local sess="${SESSIONS[$i]}"
       local count="${COUNTS[$sess]:-0}"
+      # Visible width: "[ sess (N) ] " or " sess (N)  " — measure as plain text
+      local label
+      if [[ "$i" -eq "$ACTIVE_TAB" ]]; then
+        label="[ ${sess} (${count}) ] "
+      else
+        label=" ${sess} (${count})  "
+      fi
+      local label_width=${#label}
+      if [[ $col -gt 0 && $((col + label_width)) -gt $POPUP_COLS ]]; then
+        printf '\n'
+        col=0
+        ((TAB_STRIP_ROWS++))
+      fi
       if [[ "$i" -eq "$ACTIVE_TAB" ]]; then
         printf '\e[1;7m[ %s (%s) ]\e[0m ' "$sess" "$count"
       else
         printf '\e[2m %s (%s) \e[0m ' "$sess" "$count"
       fi
+      col=$((col + label_width))
     done
     printf '\n\n'
+    ((TAB_STRIP_ROWS++))  # blank line after strip
   fi
 
   if [[ "${#CURRENT_PANES[@]}" -eq 0 ]]; then
