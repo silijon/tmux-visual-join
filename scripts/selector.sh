@@ -34,7 +34,7 @@ while IFS= read -r s; do
     fi
     SESSIONS+=("$s")
   fi
-done < <(tmux list-sessions -F '#{session_name}')
+done < <(tmux list-sessions -F '#{session_created} #{session_name}' | sort -n | cut -d' ' -f2-)
 
 declare -a CURRENT_PANES=()
 SELECTED=0
