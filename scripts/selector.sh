@@ -88,26 +88,26 @@ render() {
     printf '\n\n'
   fi
 
-  if [[ "${#SESSIONS[@]}" -gt 1 ]]; then
-    echo "j/k=move  Tab/S-Tab=session  1-9=jump  v/Enter=vertical  h=horizontal  Esc/q=cancel"
-  else
-    echo "j/k=move  v/Enter=vertical  h=horizontal  Esc/q=cancel"
-  fi
-  echo ""
-
   if [[ "${#CURRENT_PANES[@]}" -eq 0 ]]; then
     echo "  (no panes to join in this session)"
-    return
+  else
+    for i in "${!CURRENT_PANES[@]}"; do
+      local visible="${CURRENT_PANES[$i]#*$'\t'}"
+      if [[ "$i" -eq "$SELECTED" ]]; then
+        printf '\e[1;7m  %s  \e[0m\n' "$visible"
+      else
+        printf '  %s\n' "$visible"
+      fi
+    done
   fi
 
-  for i in "${!CURRENT_PANES[@]}"; do
-    local visible="${CURRENT_PANES[$i]#*$'\t'}"
-    if [[ "$i" -eq "$SELECTED" ]]; then
-      printf '\e[1;7m  %s  \e[0m\n' "$visible"
-    else
-      printf '  %s\n' "$visible"
-    fi
-  done
+  # Footer
+  printf '\n'
+  if [[ "${#SESSIONS[@]}" -gt 1 ]]; then
+    printf '\e[2mj/k=move  Tab/S-Tab=session  1-9=jump  v/Enter=vertical  h=horizontal  Esc/q=cancel\e[0m\n'
+  else
+    printf '\e[2mj/k=move  v/Enter=vertical  h=horizontal  Esc/q=cancel\e[0m\n'
+  fi
 }
 
 render
