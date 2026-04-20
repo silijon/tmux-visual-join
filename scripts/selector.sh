@@ -52,8 +52,9 @@ load_active_tab() {
 
 load_active_tab
 
-POPUP_COLS=$(tput cols 2>/dev/null || echo 80)
-POPUP_ROWS=$(tput lines 2>/dev/null || echo 24)
+read -r POPUP_ROWS POPUP_COLS < <(stty size 2>/dev/null)
+: "${POPUP_ROWS:=24}"
+: "${POPUP_COLS:=80}"
 
 # Hide cursor
 printf '\e[?25l'
@@ -99,43 +100,11 @@ render_preview() {
   local pane_id="%${raw_target##*%}"
 
   local max_cols=$((POPUP_COLS - 1))
-  local scroll_start=$((-preview_rows * 2))
 
-  {
-    echo "POPUP_ROWS=$POPUP_ROWS POPUP_COLS=$POPUP_COLS"
-    echo "used=$used preview_rows=$preview_rows"
-    echo "pane_id=$pane_id scroll_start=$scroll_start max_cols=$max_cols"
-    pane_dims=$(tmux display-message -p -t "$pane_id" '#{pane_width}x#{pane_height}' 2>/dev/null)
-    echo "source pane dims=$pane_dims"
-    raw=$(tmux capture-pane -ep -S "$scroll_start" -t "$pane_id" 2>/dev/null)
-    echo "raw lines=$(printf '%s\n' "$raw" | wc -l)"
-    after_awk=$(printf '%s\n' "$raw" | awk -v max="$max_cols" '
-      {
-        out = ""; vis = 0; i = 1; n = length($0);
-        while (i <= n && vis < max) {
-          c = substr($0, i, 1);
-          if (c == "\033") {
-            out = out c; i++;
-            if (i <= n && substr($0, i, 1) == "[") {
-              out = out "["; i++;
-              while (i <= n) {
-                ch = substr($0, i, 1); out = out ch; i++;
-                if (ch ~ /[@-~]/) break;
-              }
-            }
-          } else {
-            out = out c; vis++; i++;
-          }
-        }
-        print out "\033[0m";
-      }')
-    echo "after awk lines=$(printf '%s\n' "$after_awk" | wc -l)"
-    after_tail=$(printf '%s\n' "$after_awk" | tail -n "$preview_rows")
-    echo "after tail lines=$(printf '%s\n' "$after_tail" | wc -l)"
-    echo "---"
-  } >> /tmp/vj_debug.log
-
-  tmux capture-pane -ep -S "$scroll_start" -t "$pane_id" 2>/dev/null \
+  # Grab full scrollback so tail gets real content, not the empty bottom of the visible screen.
+  # Then strip trailing blank lines so we show the most recent actual content.
+  local output
+  output=$(tmux capture-pane -ep -S - -t "$pane_id" 2>/dev/null \
     | awk -v max="$max_cols" '
       {
         out = ""; vis = 0; i = 1; n = length($0);
@@ -156,7 +125,26 @@ render_preview() {
         }
         print out "\033[0m";
       }' \
-    | tail -n "$preview_rows"
+    | awk '
+      { lines[NR] = $0 }
+      END {
+        last = 0;
+        for (i = 1; i <= NR; i++) {
+          s = lines[i];
+          gsub(/\033\[[0-9;]*[@-~]/, "", s);
+          if (length(s) > 0) last = i;
+        }
+        for (i = 1; i <= last; i++) print lines[i];
+      }')
+
+  local actual
+  actual=$(printf '%s\n' "$output" | wc -l)
+  printf '%s\n' "$output" | tail -n "$preview_rows"
+
+  # Pad to fill preview_rows if content is shorter
+  local pad=$((preview_rows - actual))
+  [[ $actual -gt $preview_rows ]] && pad=0
+  [[ $pad -gt 0 ]] && printf '\n%.0s' $(seq 1 $pad)
 }
 
 render() {
