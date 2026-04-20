@@ -41,6 +41,8 @@ Press `prefix + m` to open the pane picker popup. A tab strip across the top sho
 
 When only one session exists the tab strip is hidden and the popup looks identical to the previous version.
 
+The bottom of the popup shows a live preview of the currently highlighted pane's content, updated as you move the selection.
+
 ## Configuration
 
 Override the default keybinding in `.tmux.conf`:

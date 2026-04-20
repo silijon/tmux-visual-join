@@ -15,5 +15,5 @@ if [ -z "$HAS_PANES" ]; then
   exit 0
 fi
 
-tmux display-popup -E -w 60% -h 40% \
+tmux display-popup -E -w 60% -h 60% \
   "CURRENT_WINDOW='$CURRENT_WINDOW' CURRENT_SESSION_ID='$CURRENT_SESSION_ID' CURRENT_WINDOW_ID='$CURRENT_WINDOW_ID' '$CURRENT_DIR/selector.sh'"

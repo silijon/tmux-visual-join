@@ -52,6 +52,9 @@ load_active_tab() {
 
 load_active_tab
 
+POPUP_COLS=$(tput cols 2>/dev/null || echo 80)
+POPUP_ROWS=$(tput lines 2>/dev/null || echo 24)
+
 # Hide cursor
 printf '\e[?25l'
 
@@ -69,6 +72,33 @@ join_pane() {
     exit 1
   fi
   exit 0
+}
+
+render_preview() {
+  local pane_count="${#CURRENT_PANES[@]}"
+  [[ "$pane_count" -eq 0 ]] && return
+
+  # Calculate rows consumed by chrome above the preview
+  local used=2  # footer + blank line
+  if [[ "${#SESSIONS[@]}" -gt 1 ]]; then
+    used=$((used + 2))  # tab strip + blank line
+  fi
+  used=$((used + pane_count))  # pane list rows
+
+  local preview_rows=$((POPUP_ROWS - used - 2))  # 2 = separator + cushion
+  [[ "$preview_rows" -lt 3 ]] && return
+
+  # Separator
+  local sep
+  sep=$(printf '─%.0s' $(seq 1 "$POPUP_COLS"))
+  printf '\e[2m%s\e[0m\n' "$sep"
+
+  # Extract the pane_id (%NN) from the join target (session_id:window_id.%pane_id)
+  local raw_target="${CURRENT_PANES[$SELECTED]%%$'\t'*}"
+  local pane_id="%${raw_target##*%}"
+
+  tmux capture-pane -ep -t "$pane_id" 2>/dev/null | tail -n "$preview_rows"
+  printf '\e[0m'
 }
 
 render() {
@@ -108,6 +138,7 @@ render() {
     done
   fi
 
+  render_preview
 }
 
 render
