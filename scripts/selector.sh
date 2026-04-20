@@ -86,7 +86,7 @@ render_preview() {
   fi
   used=$((used + pane_count))  # pane list rows
 
-  local preview_rows=$((POPUP_ROWS - used - 1))  # 1 = separator
+  local preview_rows=$((POPUP_ROWS - used - 2))  # 1 = separator + 1 = avoid scroll on last row
   [[ "$preview_rows" -lt 3 ]] && return
 
   # Separator (leave 1 col margin to prevent autowrap consuming an extra row)
