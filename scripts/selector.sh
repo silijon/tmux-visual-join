@@ -97,8 +97,28 @@ render_preview() {
   local raw_target="${CURRENT_PANES[$SELECTED]%%$'\t'*}"
   local pane_id="%${raw_target##*%}"
 
-  tmux capture-pane -ep -t "$pane_id" 2>/dev/null | tail -n "$preview_rows"
-  printf '\e[0m'
+  tmux capture-pane -ep -t "$pane_id" 2>/dev/null \
+    | tail -n "$preview_rows" \
+    | awk -v max="$POPUP_COLS" '
+      {
+        out = ""; vis = 0; i = 1; n = length($0);
+        while (i <= n && vis < max) {
+          c = substr($0, i, 1);
+          if (c == "\033") {
+            out = out c; i++;
+            if (i <= n && substr($0, i, 1) == "[") {
+              out = out "["; i++;
+              while (i <= n) {
+                ch = substr($0, i, 1); out = out ch; i++;
+                if (ch ~ /[@-~]/) break;
+              }
+            }
+          } else {
+            out = out c; vis++; i++;
+          }
+        }
+        print out "\033[0m";
+      }'
 }
 
 render() {
