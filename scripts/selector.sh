@@ -98,10 +98,11 @@ render_preview() {
   local raw_target="${CURRENT_PANES[$SELECTED]%%$'\t'*}"
   local pane_id="%${raw_target##*%}"
 
-  # Capture bottom of source pane, strip trailing blank lines, then pad to fit preview_rows
+  # Capture source pane, truncate each line to popup width, take last preview_rows.
+  # Use -S -N to pull from scrollback so short/empty viewports still fill the preview.
   local max_cols=$((POPUP_COLS - 1))
-  local captured
-  captured=$(tmux capture-pane -ep -t "$pane_id" 2>/dev/null \
+  local scroll_start=$((-preview_rows * 2))
+  tmux capture-pane -ep -S "$scroll_start" -t "$pane_id" 2>/dev/null \
     | awk -v max="$max_cols" '
       {
         out = ""; vis = 0; i = 1; n = length($0);
@@ -122,22 +123,7 @@ render_preview() {
         }
         print out "\033[0m";
       }' \
-    | awk '
-      { lines[NR] = $0 }
-      END {
-        # find last non-blank line (strip ANSI for emptiness check)
-        last = 0;
-        for (i = 1; i <= NR; i++) {
-          s = lines[i];
-          gsub(/\033\[[0-9;]*[@-~]/, "", s);
-          gsub(/[[:space:]]/, "", s);
-          if (length(s) > 0) last = i;
-        }
-        for (i = 1; i <= last; i++) print lines[i];
-      }' \
-    | tail -n "$preview_rows")
-
-  printf '%s\n' "$captured"
+    | tail -n "$preview_rows"
 }
 
 render() {
