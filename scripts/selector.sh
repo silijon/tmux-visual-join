@@ -74,6 +74,13 @@ join_pane() {
 render() {
   printf '\e[H\e[2J'
 
+  # Footer (shown at top)
+  if [[ "${#SESSIONS[@]}" -gt 1 ]]; then
+    printf '\e[2mj/k=move  Tab/S-Tab=session  1-9=jump  v/Enter=vertical  h=horizontal  Esc/q=cancel\e[0m\n\n'
+  else
+    printf '\e[2mj/k=move  v/Enter=vertical  h=horizontal  Esc/q=cancel\e[0m\n\n'
+  fi
+
   # Tab strip — only if more than one session
   if [[ "${#SESSIONS[@]}" -gt 1 ]]; then
     for i in "${!SESSIONS[@]}"; do
@@ -101,13 +108,6 @@ render() {
     done
   fi
 
-  # Footer
-  printf '\n'
-  if [[ "${#SESSIONS[@]}" -gt 1 ]]; then
-    printf '\e[2mj/k=move  Tab/S-Tab=session  1-9=jump  v/Enter=vertical  h=horizontal  Esc/q=cancel\e[0m\n'
-  else
-    printf '\e[2mj/k=move  v/Enter=vertical  h=horizontal  Esc/q=cancel\e[0m\n'
-  fi
 }
 
 render
