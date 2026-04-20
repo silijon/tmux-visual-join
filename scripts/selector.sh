@@ -105,7 +105,7 @@ render_preview() {
   # Then strip trailing blank lines so we show the most recent actual content.
   local output
   output=$(tmux capture-pane -ep -S - -t "$pane_id" 2>/dev/null \
-    | awk -v max="$max_cols" '
+    | LC_ALL=C awk -v max="$max_cols" '
       {
         out = ""; vis = 0; i = 1; n = length($0);
         while (i <= n && vis < max) {
@@ -125,7 +125,7 @@ render_preview() {
         }
         print out "\033[0m";
       }' \
-    | awk '
+    | LC_ALL=C awk '
       { lines[NR] = $0 }
       END {
         last = 0;
