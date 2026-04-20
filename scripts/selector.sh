@@ -1,23 +1,56 @@
 #!/usr/bin/env bash
 
 # selector.sh - runs inside tmux display-popup
-# Env: CURRENT_WINDOW is set by popup.sh
+# Env: CURRENT_WINDOW, CURRENT_SESSION_ID, CURRENT_WINDOW_ID set by popup.sh
 
-CURRENT_WIN_INDEX=$(tmux display-message -p '#{window_index}')
+# Format: <join_target>\t<session_name>\t<visible_row>
+ROW_FMT='#{session_id}:#{window_id}.#{pane_id}	#{session_name}	#{window_index}.#{pane_index} #{window_name} [#{pane_title}] #{pane_current_command}'
 
-# Build pane list into an array
-mapfile -t PANES < <(tmux list-panes -s \
-  -F '#{window_index}.#{pane_index} #{window_name} [#{pane_title}] #{pane_current_command}' \
-  | grep -v "^${CURRENT_WIN_INDEX}\.")
+declare -a SESSIONS=()
+declare -A PANES_BY_SESSION
+declare -A COUNTS
 
-if [ ${#PANES[@]} -eq 0 ]; then
-  echo "No panes available."
-  sleep 1
-  exit 0
-fi
+# Load all panes from all sessions, grouped by session
+while IFS=$'\t' read -r target sess_name visible; do
+  # Skip panes in the current window
+  [[ "$target" == "${CURRENT_SESSION_ID}:${CURRENT_WINDOW_ID}."* ]] && continue
+  PANES_BY_SESSION["$sess_name"]+="${target}"$'\t'"${visible}"$'\n'
+done < <(tmux list-panes -a -F "$ROW_FMT")
 
+# Count panes per session (before SESSIONS is built so counts are accurate)
+for sess in "${!PANES_BY_SESSION[@]}"; do
+  COUNTS["$sess"]=$(printf '%s' "${PANES_BY_SESSION[$sess]}" | grep -c $'\t')
+done
+
+# Get current session name
+CURRENT_SESSION_NAME=$(tmux display-message -p -t "$CURRENT_SESSION_ID" '#{session_name}')
+
+# Build SESSIONS in natural order; always include current session even if empty
+ACTIVE_TAB=0
+while IFS= read -r s; do
+  if [[ -n "${PANES_BY_SESSION[$s]:-}" || "$s" == "$CURRENT_SESSION_NAME" ]]; then
+    if [[ "$s" == "$CURRENT_SESSION_NAME" ]]; then
+      ACTIVE_TAB="${#SESSIONS[@]}"
+    fi
+    SESSIONS+=("$s")
+  fi
+done < <(tmux list-sessions -F '#{session_name}')
+
+declare -a CURRENT_PANES=()
 SELECTED=0
-TOTAL=${#PANES[@]}
+
+load_active_tab() {
+  local sess="${SESSIONS[$ACTIVE_TAB]}"
+  local raw="${PANES_BY_SESSION[$sess]:-}"
+  if [[ -z "$raw" ]]; then
+    CURRENT_PANES=()
+  else
+    mapfile -t CURRENT_PANES <<< "${raw%$'\n'}"
+  fi
+  SELECTED=0
+}
+
+load_active_tab
 
 # Hide cursor
 printf '\e[?25l'
@@ -29,21 +62,50 @@ trap cleanup EXIT
 
 join_pane() {
   local flags="$1"
-  TARGET="${PANES[$SELECTED]%% *}"
-  SESSION=$(tmux display-message -p '#{session_name}')
-  tmux join-pane $flags -s "${SESSION}:${TARGET}" -t "${CURRENT_WINDOW}"
+  [[ "${#CURRENT_PANES[@]}" -eq 0 ]] && return
+  local target="${CURRENT_PANES[$SELECTED]%%$'\t'*}"
+  if ! tmux join-pane $flags -s "$target" -t "$CURRENT_WINDOW"; then
+    tmux display-message "visual-join: join failed"
+    exit 1
+  fi
   exit 0
 }
 
 render() {
   printf '\e[H\e[2J'
-  echo "Pick a pane (j/k move, v/Enter=vertical, h=horizontal, Esc/q=cancel):"
+
+  # Tab strip — only if more than one session
+  if [[ "${#SESSIONS[@]}" -gt 1 ]]; then
+    for i in "${!SESSIONS[@]}"; do
+      local sess="${SESSIONS[$i]}"
+      local count="${COUNTS[$sess]:-0}"
+      if [[ "$i" -eq "$ACTIVE_TAB" ]]; then
+        printf '\e[1;7m[ %s (%s) ]\e[0m ' "$sess" "$count"
+      else
+        printf '\e[2m %s (%s) \e[0m ' "$sess" "$count"
+      fi
+    done
+    printf '\n\n'
+  fi
+
+  if [[ "${#SESSIONS[@]}" -gt 1 ]]; then
+    echo "j/k=move  Tab/S-Tab=session  1-9=jump  v/Enter=vertical  h=horizontal  Esc/q=cancel"
+  else
+    echo "j/k=move  v/Enter=vertical  h=horizontal  Esc/q=cancel"
+  fi
   echo ""
-  for i in "${!PANES[@]}"; do
-    if [ "$i" -eq "$SELECTED" ]; then
-      printf '\e[1;7m  %s  \e[0m\n' "${PANES[$i]}"
+
+  if [[ "${#CURRENT_PANES[@]}" -eq 0 ]]; then
+    echo "  (no panes to join in this session)"
+    return
+  fi
+
+  for i in "${!CURRENT_PANES[@]}"; do
+    local visible="${CURRENT_PANES[$i]#*$'\t'}"
+    if [[ "$i" -eq "$SELECTED" ]]; then
+      printf '\e[1;7m  %s  \e[0m\n' "$visible"
     else
-      printf '  %s\n' "${PANES[$i]}"
+      printf '  %s\n' "$visible"
     fi
   done
 }
@@ -55,47 +117,65 @@ while true; do
 
   case "$key" in
     j)
-      if [ "$SELECTED" -lt $((TOTAL - 1)) ]; then
+      if [[ "${#CURRENT_PANES[@]}" -gt 0 && "$SELECTED" -lt $((${#CURRENT_PANES[@]} - 1)) ]]; then
         ((SELECTED++))
       fi
       render
       ;;
     k)
-      if [ "$SELECTED" -gt 0 ]; then
+      if [[ "${#CURRENT_PANES[@]}" -gt 0 && "$SELECTED" -gt 0 ]]; then
         ((SELECTED--))
       fi
       render
       ;;
     v | "")
-      # v or Enter - vertical split (side by side)
       join_pane "-h"
       ;;
     h)
-      # h - horizontal split (stacked)
       join_pane ""
       ;;
+    $'\t')
+      if [[ "${#SESSIONS[@]}" -gt 1 ]]; then
+        ACTIVE_TAB=$(( (ACTIVE_TAB + 1) % ${#SESSIONS[@]} ))
+        load_active_tab
+        render
+      fi
+      ;;
+    [1-9])
+      idx=$((key - 1))
+      if [[ "$idx" -lt "${#SESSIONS[@]}" ]]; then
+        ACTIVE_TAB=$idx
+        load_active_tab
+        render
+      fi
+      ;;
     $'\x1b')
-      # Escape or arrow key sequence
       extra=""
       while IFS= read -rsn1 -t 0.1 ch; do
         extra+="$ch"
       done
       case "$extra" in
-        '[A')  # Up arrow
-          if [ "$SELECTED" -gt 0 ]; then
+        '[A')
+          if [[ "${#CURRENT_PANES[@]}" -gt 0 && "$SELECTED" -gt 0 ]]; then
             ((SELECTED--))
           fi
           render
           ;;
-        '[B')  # Down arrow
-          if [ "$SELECTED" -lt $((TOTAL - 1)) ]; then
+        '[B')
+          if [[ "${#CURRENT_PANES[@]}" -gt 0 && "$SELECTED" -lt $((${#CURRENT_PANES[@]} - 1)) ]]; then
             ((SELECTED++))
           fi
           render
           ;;
+        '[Z')
+          if [[ "${#SESSIONS[@]}" -gt 1 ]]; then
+            ACTIVE_TAB=$(( (ACTIVE_TAB - 1 + ${#SESSIONS[@]}) % ${#SESSIONS[@]} ))
+            load_active_tab
+            render
+          fi
+          ;;
         *)
-          # Standalone Esc or unrecognized sequence - cancel
-          if [ -z "$extra" ]; then
+          if [[ -z "$extra" ]]; then
             exit 0
           fi
           ;;

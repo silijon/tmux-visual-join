@@ -2,19 +2,18 @@
 
 CURRENT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-# Get current window identifier (session:window_index)
 CURRENT_WINDOW=$(tmux display-message -p '#{session_name}:#{window_index}')
-CURRENT_WIN_INDEX=$(tmux display-message -p '#{window_index}')
+CURRENT_SESSION_ID=$(tmux display-message -p '#{session_id}')
+CURRENT_WINDOW_ID=$(tmux display-message -p '#{window_id}')
 
-# List all panes in the session except those in the current window
-PANE_LIST=$(tmux list-panes -s \
-  -F '#{window_index}.#{pane_index} #{window_name} [#{pane_title}] #{pane_current_command}' \
-  | grep -v "^${CURRENT_WIN_INDEX}\.")
+# Check if there are any panes to join across all sessions
+HAS_PANES=$(tmux list-panes -a -F '#{session_id}:#{window_id}' \
+  | grep -v "^${CURRENT_SESSION_ID}:${CURRENT_WINDOW_ID}$" | head -1)
 
-if [ -z "$PANE_LIST" ]; then
+if [ -z "$HAS_PANES" ]; then
   tmux display-message "No panes in other windows to join."
   exit 0
 fi
 
 tmux display-popup -E -w 60% -h 40% \
-  "CURRENT_WINDOW='$CURRENT_WINDOW' '$CURRENT_DIR/selector.sh'"
+  "CURRENT_WINDOW='$CURRENT_WINDOW' CURRENT_SESSION_ID='$CURRENT_SESSION_ID' CURRENT_WINDOW_ID='$CURRENT_WINDOW_ID' '$CURRENT_DIR/selector.sh'"

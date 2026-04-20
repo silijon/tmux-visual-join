@@ -1,6 +1,6 @@
 # tmux-visual-join
 
-A tmux plugin that provides an interactive popup for pulling panes from other windows into your current window.
+A tmux plugin that provides an interactive popup for pulling panes from any session into your current window.
 
 ![screenshot](screenshot.png)
 
@@ -26,15 +26,20 @@ run-shell '/path/to/tmux-visual-join/visual-join.tmux'
 
 ## Usage
 
-Press `prefix + m` to open the pane picker popup. It lists all panes in your current session except those in the current window.
+Press `prefix + m` to open the pane picker popup. A tab strip across the top shows all open sessions; the current session's tab is pre-selected. Tab and Shift-Tab navigate between sessions; panes from the active session are listed below.
 
 | Key              | Action                              |
 |------------------|-------------------------------------|
 | `j` / `Down`     | Move selection down                 |
 | `k` / `Up`       | Move selection up                   |
+| `Tab`            | Next session tab                    |
+| `Shift-Tab`      | Previous session tab                |
+| `1`-`9`          | Jump to nth session tab             |
 | `v` or `Enter`   | Join pane as vertical split (side by side) |
 | `h`              | Join pane as horizontal split (stacked)    |
 | `Esc` / `q`      | Cancel                              |
+
+When only one session exists the tab strip is hidden and the popup looks identical to the previous version.
 
 ## Configuration
 
