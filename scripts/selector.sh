@@ -85,7 +85,7 @@ render_preview() {
   fi
   used=$((used + pane_count))  # pane list rows
 
-  local preview_rows=$((POPUP_ROWS - used - 2))  # 2 = separator + cushion
+  local preview_rows=$((POPUP_ROWS - used - 1))  # 1 = separator
   [[ "$preview_rows" -lt 3 ]] && return
 
   # Separator
@@ -97,8 +97,9 @@ render_preview() {
   local raw_target="${CURRENT_PANES[$SELECTED]%%$'\t'*}"
   local pane_id="%${raw_target##*%}"
 
-  tmux capture-pane -ep -t "$pane_id" 2>/dev/null \
-    | tail -n "$preview_rows" \
+  # Capture bottom of source pane, strip trailing blank lines, then pad to fit preview_rows
+  local captured
+  captured=$(tmux capture-pane -ep -t "$pane_id" 2>/dev/null \
     | awk -v max="$POPUP_COLS" '
       {
         out = ""; vis = 0; i = 1; n = length($0);
@@ -118,7 +119,23 @@ render_preview() {
           }
         }
         print out "\033[0m";
-      }'
+      }' \
+    | awk '
+      { lines[NR] = $0 }
+      END {
+        # find last non-blank line (strip ANSI for emptiness check)
+        last = 0;
+        for (i = 1; i <= NR; i++) {
+          s = lines[i];
+          gsub(/\033\[[0-9;]*[@-~]/, "", s);
+          gsub(/[[:space:]]/, "", s);
+          if (length(s) > 0) last = i;
+        }
+        for (i = 1; i <= last; i++) print lines[i];
+      }' \
+    | tail -n "$preview_rows")
+
+  printf '%s\n' "$captured"
 }
 
 render() {
